@@ -46,7 +46,9 @@ customersRouter.post("/customers", async (req, res) => {
   if (validation.error) return res.sendStatus(400);
 
   try {
-    const cpfCheck = await db.query(`SELECT * WHERE cpf=$1`, [cpf]);
+    const cpfCheck = await db.query(`SELECT * FROM customers WHERE cpf=$1`, [
+      cpf,
+    ]);
 
     if (cpfCheck.rowCount >= 1) return res.sendStatus(409);
   } catch (err) {
