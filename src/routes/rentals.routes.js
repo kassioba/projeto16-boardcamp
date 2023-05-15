@@ -8,7 +8,7 @@ const rentalsRouter = Router();
 rentalsRouter.get("/rentals", async (req, res) => {
   try {
     const rents = await db.query(`
-    SELECT *, TO_CHAR("rentDate", 'YYYY-MM-DD') AS "rentDate", games.name AS "gameName", rentals.id AS "id" FROM rentals
+    SELECT *, TO_CHAR("rentDate", 'YYYY-MM-DD') AS "rentDate", TO_CHAR("returnDate", 'YYYY-MM-DD') AS "returnDate", games.name AS "gameName", rentals.id AS "id" FROM rentals
         JOIN games ON rentals."gameId"=games.id
         JOIN customers ON rentals."customerId"=customers.id;
     `);
@@ -84,6 +84,67 @@ rentalsRouter.post("/rentals", async (req, res) => {
     VALUES ('${customerId}', '${gameId}', '${rentDate}', '${daysRented}', '${originalPrice}');`);
 
     res.sendStatus(201);
+  } catch (err) {
+    return res.status(500).send(err.message);
+  }
+});
+
+rentalsRouter.post("/rentals/:id/return", async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const rent = await db.query(
+      `SELECT *, TO_CHAR("rentDate", 'YYYY-MM-DD') AS "rentDate" FROM rentals WHERE id=$1;`,
+      [id]
+    );
+
+    if (rent.rowCount === 0) return res.sendStatus(404);
+
+    if (rent.rows[0].returnDate) return res.sendStatus(400);
+
+    const returnDate = dayjs().format("YYYY-MM-DD");
+
+    const daysDelayed =
+      dayjs(rent.rows[0].rentDate).diff(returnDate, "day") * -1 - 3;
+
+    let delayFee = 0;
+
+    if (daysDelayed > 0) {
+      delayFee =
+        (rent.rows[0].originalPrice / rent.rows[0].daysRented) * daysDelayed;
+    }
+
+    console.log(delayFee);
+
+    await db.query(
+      `
+    UPDATE rentals SET "returnDate"='${returnDate}', "delayFee"='${delayFee}' 
+        WHERE id=$1;`,
+      [id]
+    );
+
+    res.sendStatus(200);
+  } catch (err) {
+    return res.status(500).send(err.message);
+  }
+});
+
+rentalsRouter.delete("/rentals/:id", async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const rent = await db.query(
+      `SELECT *, TO_CHAR("rentDate", 'YYYY-MM-DD') AS "rentDate" FROM rentals WHERE id=$1;`,
+      [id]
+    );
+
+    if (rent.rowCount === 0) return res.sendStatus(404);
+
+    if (!rent.rows[0].returnDate) return res.sendStatus(400);
+
+    await db.query(`DELETE FROM rentals WHERE id=$1;`, [id]);
+
+    res.sendStatus(200);
   } catch (err) {
     return res.status(500).send(err.message);
   }
